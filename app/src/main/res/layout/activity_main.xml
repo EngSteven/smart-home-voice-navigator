@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp"
+    android:background="#F3F4F6">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Smart Home Hub"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        android:textColor="#1F2937"
+        android:layout_marginBottom="16dp"/>
+
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Sistema en línea"
+        android:textSize="16sp"
+        android:textColor="#10B981"
+        android:layout_marginBottom="48dp"/>
+
+    <TextView
+        android:id="@+id/tvPrediction"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="..."
+        android:textSize="48sp"
+        android:textStyle="bold"
+        android:textColor="#3B82F6"
+        android:layout_marginBottom="64dp"/>
+
+    <Button
+        android:id="@+id/btnRecord"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:text="🎙️"
+        android:textSize="32sp"
+        android:backgroundTint="#FFFFFF"
+        android:textColor="#000000"
+        android:elevation="4dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Mantén presionado para hablar"
+        android:textSize="14sp"
+        android:textColor="#6B7280"
+        android:layout_marginTop="16dp"/>
+
+</LinearLayout>
