@@ -6,13 +6,14 @@ class MelSpectrogramProcessor {
 
     private val sampleRate = 16000
     private val nFft = 1024
-    private val hopLength = 512
-    private val nMels = 64
+    private val hopLength = 125
+    private val nMels = 128
     private val fMin = 0.0
     private val fMax = sampleRate / 2.0
 
     private val melFilterBank: Array<FloatArray>
     private val hannWindow: FloatArray
+    private val size = 128
 
     init {
         hannWindow = FloatArray(nFft) { i ->
@@ -24,12 +25,12 @@ class MelSpectrogramProcessor {
     fun process(audioData: FloatArray): FloatArray {
         // Calculamos cuántos frames (columnas) saldrán
         val nFrames = 1 + (audioData.size - nFft) / hopLength
-        val spectrogram = Array(nMels) { FloatArray(32) { -100f } } // Inicializamos en silencio (-100dB)
+        val spectrogram = Array(nMels) { FloatArray(size) { -100f } }
 
         val xReal = FloatArray(nFft)
         val xImag = FloatArray(nFft)
 
-        for (i in 0 until minOf(nFrames, 32)) {
+        for (i in 0 until minOf(nFrames, size)) {
             val start = i * hopLength
 
             // 1. Aplicar ventana de Hann
@@ -67,11 +68,11 @@ class MelSpectrogramProcessor {
             }
         }
 
-        // 5. Aplanar la matriz [64, 32] a un arreglo 1D para ONNX
-        val flatSpectrogram = FloatArray(64 * 32)
+        // 5. Aplanar la matriz a un arreglo 1D para ONNX
+        val flatSpectrogram = FloatArray(size * size)
         var index = 0
-        for (m in 0 until 64) {
-            for (f in 0 until 32) {
+        for (m in 0 until size) {
+            for (f in 0 until size) {
                 flatSpectrogram[index++] = spectrogram[m][f]
             }
         }

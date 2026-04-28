@@ -57,7 +57,7 @@ class OnnxModelManager(context: Context) {
     fun predict(flatSpectrogram: FloatArray): String {
         val session = ortSession ?: return "Error: Sesión no inicializada"
 
-        val shape = longArrayOf(1, 1, 64, 32)
+        val shape = longArrayOf(1, 1, 128, 128)
         val floatBuffer = java.nio.FloatBuffer.wrap(flatSpectrogram)
         val inputTensor = OnnxTensor.createTensor(ortEnvironment, floatBuffer, shape)
 
