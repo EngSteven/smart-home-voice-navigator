@@ -1,11 +1,12 @@
 package com.example.smarthomevoice
 
+import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
@@ -13,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -29,78 +31,68 @@ fun ConfirmationScreen(
     lastCommand: String,
     onRecordClick: () -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
     ) {
-        Spacer(modifier = Modifier.weight(1f))
+        VoiceCommandStatus(isListening = isListening, lastCommand = lastCommand)
 
-        // Tarjeta de Alerta
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = CardBackground),
-            border = BorderStroke(3.dp, WarningOrange)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = if (isLandscape) Arrangement.Top else Arrangement.Center
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+            // Tarjeta de Alerta
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = CardBackground),
+                border = BorderStroke(3.dp, WarningOrange)
             ) {
-                Text(
-                    text = "ACCIÓN SENSIBLE",
-                    color = WarningOrange,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                Text(
-                    text = actionName,
-                    color = Color.White,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = actionDescription,
-                    color = TextGray,
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Opciones visuales
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                Column(
+                    modifier = Modifier.padding(if (isLandscape) 16.dp else 24.dp).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = "Di 'YES'", color = WarningOrange, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Text(text = "Di 'NO'", color = TextGray, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(
+                        text = "ACCIÓN SENSIBLE",
+                        color = WarningOrange,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Text(
+                        text = actionName,
+                        color = Color.White,
+                        fontSize = if (isLandscape) 22.sp else 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = actionDescription,
+                        color = TextGray,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(if (isLandscape) 16.dp else 32.dp))
+
+                    // Opciones visuales
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CommandHint(label = "Confirmar", commands = listOf("yes"), highlightColor = WarningOrange)
+                        CommandHint(label = "Cancelar", commands = listOf("no"), highlightColor = TextGray)
+                    }
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Interacción por voz
-        Text(
-            text = "Comando detectado: $lastCommand",
-            color = if (lastCommand != "Ninguno") WarningOrange else TextGray,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        //Button(
-        //    onClick = onRecordClick,
-        //    enabled = !isListening,
-        //    modifier = Modifier.fillMaxWidth(0.7f).height(56.dp)
-        //) {
-        //    Text(if (isListening) "Escuchando..." else "Tocar para Hablar", fontSize = 18.sp)
-        //}
-        //Spacer(modifier = Modifier.height(24.dp))
     }
 }

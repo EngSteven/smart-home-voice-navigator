@@ -1,18 +1,20 @@
 package com.example.smarthomevoice
 
+import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,96 +32,75 @@ fun DashboardScreen(
     lastCommand: String,
     onRecordClick: () -> Unit
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "Smart Home",
-            color = Color.White,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 32.dp, bottom = 8.dp)
-        )
-        Text(
-            text = "Esperando comando de voz...",
-            color = NeonCyan,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
+        VoiceCommandStatus(isListening = isListening, lastCommand = lastCommand)
 
-        // Fila 1: Luces (0) y Ventilador (1)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            DeviceCard(
-                title = "Luces",
-                subtitle = "Sala y Cuarto",
-                isFocused = focusedIndex == 0,
-                modifier = Modifier.weight(1f)
-            )
-            DeviceCard(
-                title = "Ventilador",
-                subtitle = "Modo confort",
-                isFocused = focusedIndex == 1,
-                modifier = Modifier.weight(1f)
-            )
+            AppHeader(title = "Smart Home")
+
+            // Si es landscape, podemos usar 4 columnas o mantener 2x2 pero sin aspectRatio tan agresivo
+            val cardModifier = if (isLandscape) Modifier.height(120.dp) else Modifier.aspectRatio(1f)
+
+            // Fila 1: Luces (0) y Ventilador (1)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                DeviceCard(
+                    title = "Luces",
+                    subtitle = "Sala y Cuarto",
+                    isFocused = focusedIndex == 0,
+                    modifier = Modifier.weight(1f).then(cardModifier)
+                )
+                DeviceCard(
+                    title = "Ventilador",
+                    subtitle = "Modo confort",
+                    isFocused = focusedIndex == 1,
+                    modifier = Modifier.weight(1f).then(cardModifier)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Fila 2: TV (2) y Rutinas (3)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                DeviceCard(
+                    title = "TV",
+                    subtitle = "Media center",
+                    isFocused = focusedIndex == 2,
+                    modifier = Modifier.weight(1f).then(cardModifier)
+                )
+                DeviceCard(
+                    title = "Rutinas",
+                    subtitle = "Estudio, Dormir",
+                    isFocused = focusedIndex == 3,
+                    modifier = Modifier.weight(1f).then(cardModifier)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            CommandHint(label = "Navega con", commands = listOf("up", "down", "left", "right"))
+            CommandHint(label = "Selecciona con", commands = listOf("yes"))
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Fila 2: TV (2) y Rutinas (3)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            DeviceCard(
-                title = "TV",
-                subtitle = "Media center",
-                isFocused = focusedIndex == 2,
-                modifier = Modifier.weight(1f)
-            )
-            DeviceCard(
-                title = "Rutinas",
-                subtitle = "Estudio, Dormir",
-                isFocused = focusedIndex == 3,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        Text(text = "Navega con: 'up', 'down', 'left', 'right'", color = TextGray, fontSize = 14.sp)
-        Text(text = "Selecciona con: 'yes'", color = TextGray, fontSize = 14.sp)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Muestra el último comando detectado
-        Text(
-            text = "Comando detectado: $lastCommand",
-            color = if (lastCommand != "Ninguno") NeonCyan else TextGray,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        // Botón principal de grabación
-        //Button(
-        //    onClick = onRecordClick,
-        //    enabled = !isListening, // Deshabilita el botón mientras graba
-        //    modifier = Modifier
-        //        .fillMaxWidth(0.7f)
-        //        .height(56.dp)
-        //) {
-        //    Text(
-        //        text = if (isListening) "Escuchando..." else "Tocar para Hablar",
-        //        fontSize = 18.sp
-        //    )
-        //}
-        //Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
@@ -132,7 +113,7 @@ fun DeviceCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.aspectRatio(1f), // Mantiene la tarjeta cuadrada
+        modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = CardBackground),
         // Aquí ocurre la magia reactiva: Si isFocused es true, pintamos el borde neón
