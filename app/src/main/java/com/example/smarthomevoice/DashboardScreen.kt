@@ -107,19 +107,19 @@ fun DashboardScreen(
         )
 
         // Botón principal de grabación
-        Button(
-            onClick = onRecordClick,
-            enabled = !isListening, // Deshabilita el botón mientras graba
-            modifier = Modifier
-                .fillMaxWidth(0.7f)
-                .height(56.dp)
-        ) {
-            Text(
-                text = if (isListening) "Escuchando..." else "Tocar para Hablar",
-                fontSize = 18.sp
-            )
-        }
-        Spacer(modifier = Modifier.height(24.dp))
+        //Button(
+        //    onClick = onRecordClick,
+        //    enabled = !isListening, // Deshabilita el botón mientras graba
+        //    modifier = Modifier
+        //        .fillMaxWidth(0.7f)
+        //        .height(56.dp)
+        //) {
+        //    Text(
+        //        text = if (isListening) "Escuchando..." else "Tocar para Hablar",
+        //        fontSize = 18.sp
+        //    )
+        //}
+        //Spacer(modifier = Modifier.height(24.dp))
     }
 }
 

@@ -80,15 +80,15 @@ fun DeviceScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        Button(
-            onClick = onRecordClick,
-            enabled = !isListening,
-            modifier = Modifier
-                .fillMaxWidth(0.7f)
-                .height(56.dp)
-        ) {
-            Text(if (isListening) "Escuchando..." else "Tocar para Hablar", fontSize = 18.sp)
-        }
-        Spacer(modifier = Modifier.height(24.dp))
+        //Button(
+        //    onClick = onRecordClick,
+        //    enabled = !isListening,
+        //    modifier = Modifier
+        //        .fillMaxWidth(0.7f)
+        //        .height(56.dp)
+        //) {
+        //    Text(if (isListening) "Escuchando..." else "Tocar para Hablar", fontSize = 18.sp)
+        //}
+        //Spacer(modifier = Modifier.height(24.dp))
     }
 }

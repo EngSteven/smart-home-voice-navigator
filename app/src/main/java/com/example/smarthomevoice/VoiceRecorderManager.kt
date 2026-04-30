@@ -1,80 +1,86 @@
-package com.example.smarthomevoice
+package com.example.smarthomevoice // Asegúrate de que sea tu paquete
 
 import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import kotlin.math.abs
 
 class VoiceRecorderManager {
     private val sampleRate = 16000
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_FLOAT
+    private val bufferSize = 16000 // 1 segundo exacto de audio
 
-    private val windowSize = 16000 // El 1 segundo exacto que necesita ONNX
-    private val totalRecordSize = 32000 // Grabamos 2 segundos para dar margen de tiempo
-
-    private val maxAvgAmplitude = 0f    // Filtro para no captar ruido de fondo basura
+    @Volatile
+    private var isListening = false
+    private var recordingJob: Job? = null
 
     @SuppressLint("MissingPermission")
-    suspend fun recordSmartOneSecond(): FloatArray? = withContext(Dispatchers.IO) {
-        try {
+    fun startContinuousListening(
+        scope: CoroutineScope,
+        onAudioReady: suspend (FloatArray) -> Unit
+    ) {
+        if (isListening) return
+        isListening = true
+
+        recordingJob = scope.launch(Dispatchers.IO) {
             val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
             val record = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 sampleRate,
                 channelConfig,
                 audioFormat,
-                maxOf(minBufferSize, totalRecordSize * 4)
+                maxOf(minBufferSize, bufferSize * 2)
             )
 
-            if (record.state != AudioRecord.STATE_INITIALIZED) return@withContext null
+            if (record.state != AudioRecord.STATE_INITIALIZED) {
+                isListening = false
+                return@launch
+            }
 
-            // 1. Grabamos 2 segundos completos
-            val fullAudioData = FloatArray(totalRecordSize)
             record.startRecording()
+            val audioBuffer = FloatArray(bufferSize)
 
-            var read = 0
-            while (read < totalRecordSize) {
-                val result = record.read(fullAudioData, read, totalRecordSize - read, AudioRecord.READ_BLOCKING)
-                if (result < 0) break
-                read += result
-            }
+            try {
+                // Bucle infinito mientras el micrófono deba estar encendido
+                while (isListening && isActive) {
+                    var read = 0
+                    // Llenamos el buffer de 1 segundo (16,000 muestras)
+                    while (read < bufferSize && isListening && isActive) {
+                        val result = record.read(audioBuffer, read, bufferSize - read, AudioRecord.READ_BLOCKING)
+                        if (result < 0) break
+                        read += result
+                    }
 
-            record.stop()
-            record.release()
+                    // 1. Calculamos la energía del audio capturado
+                    var currentEnergy = 0f
+                    for (i in 0 until bufferSize) {
+                        currentEnergy += abs(audioBuffer[i])
+                    }
+                    val avgAmplitude = currentEnergy / bufferSize
 
-            // 2. ALGORITMO DE AUTO-ENFOQUE (Buscamos la voz)
-            var maxEnergy = 0f
-            var bestStartIdx = 0
-
-            // Escaneamos saltando de a 500 muestras para buscar la ventana de 1 segundo más ruidosa
-            for (i in 0..totalRecordSize - windowSize step 500) {
-                var currentEnergy = 0f
-                for (j in i until i + windowSize) {
-                    currentEnergy += abs(fullAudioData[j])
+                    // 2. Puerta de Ruido (Noise Gate): Si hay un sonido fuerte (voz), lo enviamos a procesar.
+                    // Si es puro silencio, el ciclo simplemente lo descarta y vuelve a grabar,
+                    // ahorrando miles de cálculos a la IA.
+                    if (avgAmplitude > 0.005f) { // Tu umbral calibrado
+                        // Pasamos una COPIA del buffer para que el micrófono pueda
+                        // seguir grabando el siguiente segundo sin sobreescribir este
+                        onAudioReady(audioBuffer.copyOf())
+                    }
                 }
-                if (currentEnergy > maxEnergy) {
-                    maxEnergy = currentEnergy
-                    bestStartIdx = i
-                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                record.stop()
+                record.release()
             }
-
-            // 3. FILTRO DE RUIDO DE FONDO / SILENCIO
-            // Si la energía promedio de ese pedazo "ruidoso" es muy baja, es solo aire o silencio
-            //val avgAmplitude = maxEnergy / windowSize
-            //if (avgAmplitude < maxAvgAmplitude) {
-            //    return@withContext null
-            //}
-
-            // 4. Recortamos el audio perfecto y se lo damos a ONNX
-            return@withContext fullAudioData.copyOfRange(bestStartIdx, bestStartIdx + windowSize)
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return@withContext null
         }
+    }
+
+    fun stopListening() {
+        isListening = false
+        recordingJob?.cancel()
     }
 }

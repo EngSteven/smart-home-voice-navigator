@@ -6,26 +6,19 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+
 
 class MainActivity : ComponentActivity() {
 
@@ -39,11 +32,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Solicitamos permisos al inicio si no los tenemos
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1)
         }
 
-        // Inicializar el modelo (asumiendo que tu OnnxModelManager requiere el contexto)
         onnxManager = OnnxModelManager(this)
 
         setContent {
@@ -51,40 +44,53 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     MainAppUI(
                         viewModel = viewModel,
-                        onRecordTriggered = { startRecordingAndInference() }
+                        // Enviamos una función vacía porque el botón ya no hace nada, es pura decoración
+                        onRecordTriggered = { /* Ya no hace nada, la escucha es automática */ }
                     )
                 }
             }
         }
     }
 
-    // Función que maneja el hilo de I/O para el audio y la inferencia
-    private fun startRecordingAndInference() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            // Avisamos a la UI que empezamos a grabar
-            withContext(Dispatchers.Main) { viewModel.setListening(true) }
+    // Encendemos la escucha infinita CADA VEZ que la app esté visible en pantalla
+    override fun onResume() {
+        super.onResume()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            startAlwaysOnAssistant()
+        }
+    }
 
-            // 1. Grabar audio usando tu método original (puede ser null)
-            val audioData: FloatArray? = voiceRecorder.recordSmartOneSecond()
+    // Apagamos el micrófono si el usuario minimiza la app para que Android no lance una excepción
+    override fun onPause() {
+        super.onPause()
+        voiceRecorder.stopListening()
+        viewModel.setListening(false)
+    }
 
-            if (audioData != null) {
-                // 2. Preprocesar a Mel Espectrograma
-                val flatSpectrogram = melProcessor.process(audioData)
+    // Función que mantiene vivo el bucle
+    private fun startAlwaysOnAssistant() {
+        // Mantenemos la UI con la animación de que siempre está escuchando
+        viewModel.setListening(true)
 
-                // 3. Inferencia con ONNX
-                val prediction = onnxManager.predict(flatSpectrogram)
+        voiceRecorder.startContinuousListening(lifecycleScope) { audioData ->
+            // Este bloque se ejecuta SOLAMENTE cuando el micrófono detecta un sonido fuerte
 
-                // 4. Volver al hilo principal para actualizar la UI
-                withContext(Dispatchers.Main) {
-                    viewModel.processVoiceCommand(prediction)
-                    viewModel.setListening(false)
-                }
-            } else {
-                // Si el audio es null (volumen muy bajo), restauramos la UI
-                withContext(Dispatchers.Main) {
-                    viewModel.processVoiceCommand("silencio") // Opcional: manejar este estado en la UI
-                    viewModel.setListening(false)
-                }
+            // 1. Procesamiento acústico (128x128)
+            val flatSpectrogram = melProcessor.process(audioData)
+
+            // 2. Predicción de IA
+            val prediction = onnxManager.predict(flatSpectrogram)
+
+            // 3. Reacción en la Interfaz
+            // No muestre nada en caso de no reconocer el comando.
+            //if (prediction != "unknown") {
+            //    // Volvemos al hilo principal para actualizar la UI según el comando
+            //    lifecycleScope.launch(Dispatchers.Main) {
+            //        viewModel.processVoiceCommand(prediction)
+            //    }
+            //}
+            lifecycleScope.launch(Dispatchers.Main) {
+                viewModel.processVoiceCommand(prediction)
             }
         }
     }
@@ -98,7 +104,6 @@ fun MainAppUI(viewModel: SmartHomeViewModel, onRecordTriggered: () -> Unit) {
     val lastCommand by viewModel.lastCommand.collectAsState()
     val isDeviceOn by viewModel.isDeviceOn.collectAsState()
 
-    // estados para Rutinas
     val focusedRoutineIndex by viewModel.focusedRoutineIndex.collectAsState()
     val isRoutineRunning by viewModel.isRoutineRunning.collectAsState()
 
@@ -119,7 +124,6 @@ fun MainAppUI(viewModel: SmartHomeViewModel, onRecordTriggered: () -> Unit) {
                 else -> "Dispositivo"
             }
 
-            // Llamamos a nuestra nueva pantalla
             DeviceScreen(
                 deviceName = deviceName,
                 isDeviceOn = isDeviceOn,
