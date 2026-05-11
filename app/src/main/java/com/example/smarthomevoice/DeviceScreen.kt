@@ -17,18 +17,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/**
+ * Pantalla de detalle de un dispositivo individual que muestra su estado operativo actual.
+ *
+ * Adapta su diseño según la orientación del dispositivo (Portrait/Landscape) para maximizar
+ * la visibilidad del indicador de estado y la lista de comandos disponibles mediante el
+ * sistema de reconocimiento de voz continuo.
+ *
+ * @param deviceName Nombre del dispositivo actual (ej. "Luces Sala").
+ * @param isDeviceOn Estado operativo del dispositivo (`true` para encendido, `false` para apagado).
+ * @param isListening Estado actual del servicio de reconocimiento continuo de voz.
+ * @param lastCommand Último comando procesado para mostrar retroalimentación visual al usuario.
+ */
 @Composable
 fun DeviceScreen(
     deviceName: String,
     isDeviceOn: Boolean,
     isListening: Boolean,
-    lastCommand: String,
-    onRecordClick: () -> Unit
+    lastCommand: String
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    // Si está encendido usamos nuestro Cyan Neón, si no, un gris apagado
+    // Definición de la paleta de estado: Activo (Neón) o Inactivo (Gris oscuro)
     val statusColor = if (isDeviceOn) NeonCyan else Color.DarkGray
     val statusText = if (isDeviceOn) "ON" else "OFF"
 
@@ -49,8 +60,11 @@ fun DeviceScreen(
             AppHeader(title = deviceName)
 
             if (isLandscape) {
+                // Disposición horizontal optimizada para pantallas anchas
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
@@ -62,6 +76,7 @@ fun DeviceScreen(
                     }
                 }
             } else {
+                // Disposición vertical estándar para pantallas estrechas
                 Spacer(modifier = Modifier.height(40.dp))
 
                 StatusIndicator(statusColor, statusText, size = 220.dp)
@@ -77,6 +92,16 @@ fun DeviceScreen(
     }
 }
 
+/**
+ * Componente visual circular que representa claramente el estado de un dispositivo.
+ *
+ * Escala su fuente internamente de manera proporcional al tamaño total del contenedor
+ * para asegurar la legibilidad en diferentes resoluciones y disposiciones.
+ *
+ * @param statusColor Color que representa el estado del dispositivo (ej. Cyan para encendido).
+ * @param statusText Texto corto que se muestra en el centro del indicador (ej. "ON", "OFF").
+ * @param size Diámetro total del componente circular.
+ */
 @Composable
 fun StatusIndicator(statusColor: Color, statusText: String, size: androidx.compose.ui.unit.Dp) {
     Box(
@@ -89,6 +114,7 @@ fun StatusIndicator(statusColor: Color, statusText: String, size: androidx.compo
         Text(
             text = statusText,
             color = statusColor,
+            // Ajuste dinámico del tamaño de la fuente basado en el diámetro del contenedor
             fontSize = (size.value * 0.12).sp,
             fontWeight = FontWeight.Bold
         )

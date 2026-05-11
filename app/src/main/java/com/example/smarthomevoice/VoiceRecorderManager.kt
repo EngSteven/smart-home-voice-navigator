@@ -1,4 +1,4 @@
-package com.example.smarthomevoice // Asegúrate de que sea tu paquete
+package com.example.smarthomevoice
 
 import android.annotation.SuppressLint
 import android.media.AudioFormat
@@ -7,16 +7,41 @@ import android.media.MediaRecorder
 import kotlinx.coroutines.*
 import kotlin.math.abs
 
+/**
+ * Gestor de captura de audio de bajo nivel optimizado para el sistema de escucha continua (hands-free).
+ *
+ * Configura y administra el ciclo de vida del [AudioRecord] de Android, capturando flujos
+ * de audio PCM en formato de punto flotante a 16kHz. Actúa como la capa de ingestión principal
+ * y cuenta con un mecanismo de Detección de Actividad de Voz (VAD) basado en umbrales de energía
+ * para descartar silencios y delegar únicamente audio válido al motor de procesamiento digital (DSP).
+ */
 class VoiceRecorderManager {
+
+    // Parámetros acústicos requeridos estrictamente por el modelo ONNX
     private val sampleRate = 16000
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_FLOAT
-    private val bufferSize = 16000 // 1 segundo exacto de audio
+
+    // Tamaño del bloque correspondiente a exactamente 1 segundo de muestreo continuo
+    private val bufferSize = 16000
 
     @Volatile
     private var isListening = false
     private var recordingJob: Job? = null
 
+    /**
+     * Inicia el bucle infinito de captura de audio en un hilo secundario manejado por Corrutinas.
+     *
+     * Implementa una puerta de ruido (Noise Gate) calculando la amplitud media rectificada
+     * del bloque de audio. La fórmula utilizada es:
+     * $$ A_{avg} = \frac{1}{N} \sum_{i=0}^{N-1} |x[i]| $$
+     * donde $N$ es el `bufferSize` y $x[i]$ es el valor de la muestra de audio. Si $A_{avg}$
+     * supera el umbral de calibración, el bloque se clona y se envía de forma asíncrona al consumidor.
+     *
+     * @param scope El [CoroutineScope] en el que se lanzará la tarea de grabación I/O.
+     * @param onAudioReady Callback suspendido que se invoca cuando un bloque de audio válido
+     * supera la puerta de ruido y está listo para la extracción de características (Espectrograma).
+     */
     @SuppressLint("MissingPermission")
     fun startContinuousListening(
         scope: CoroutineScope,
@@ -44,29 +69,32 @@ class VoiceRecorderManager {
             val audioBuffer = FloatArray(bufferSize)
 
             try {
-                // Bucle infinito mientras el micrófono deba estar encendido
                 while (isListening && isActive) {
                     var read = 0
-                    // Llenamos el buffer de 1 segundo (16,000 muestras)
+
+                    // Llenado bloqueante del buffer para asegurar muestras completas (1 segundo)
                     while (read < bufferSize && isListening && isActive) {
-                        val result = record.read(audioBuffer, read, bufferSize - read, AudioRecord.READ_BLOCKING)
+                        val result = record.read(
+                            audioBuffer,
+                            read,
+                            bufferSize - read,
+                            AudioRecord.READ_BLOCKING
+                        )
                         if (result < 0) break
                         read += result
                     }
 
-                    // 1. Calculamos la energía del audio capturado
+                    // Cálculo de energía de la señal (Amplitud media rectificada)
                     var currentEnergy = 0f
                     for (i in 0 until bufferSize) {
                         currentEnergy += abs(audioBuffer[i])
                     }
                     val avgAmplitude = currentEnergy / bufferSize
 
-                    // 2. Puerta de Ruido (Noise Gate): Si hay un sonido fuerte (voz), lo enviamos a procesar.
-                    // Si es puro silencio, el ciclo simplemente lo descarta y vuelve a grabar,
-                    // ahorrando miles de cálculos a la IA.
-                    if (avgAmplitude > 0.005f) { // Tu umbral calibrado
-                        // Pasamos una COPIA del buffer para que el micrófono pueda
-                        // seguir grabando el siguiente segundo sin sobreescribir este
+                    // Aplicación del umbral de detección de voz (Noise Gate ~ 0.005f)
+                    if (avgAmplitude > 0.005f) {
+                        // Despacho defensivo: Se clona el arreglo para evitar condiciones de carrera
+                        // mientras el micrófono sobreescribe el buffer original en la próxima iteración.
                         onAudioReady(audioBuffer.copyOf())
                     }
                 }
@@ -79,6 +107,10 @@ class VoiceRecorderManager {
         }
     }
 
+    /**
+     * Interrumpe el bucle de grabación, cancela el Job de la corrutina y libera
+     * los recursos de hardware asociados al micrófono.
+     */
     fun stopListening() {
         isListening = false
         recordingJob?.cancel()

@@ -19,18 +19,28 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Colores base para nuestro estilo Dark/Neon
+/** Paleta de colores base para el tema visual Dark/Neon de la aplicación. */
 val DarkBackground = Color(0xFF121212)
 val CardBackground = Color(0xFF1E1E1E)
-val NeonCyan = Color(0xFF00E5FF) // Color de foco principal
+val NeonCyan = Color(0xFF00E5FF)
 val TextGray = Color(0xFFAAAAAA)
 
+/**
+ * Pantalla principal del panel de control (Dashboard) que muestra los dispositivos conectados.
+ *
+ * Implementa una cuadrícula responsiva que ajusta las proporciones de las tarjetas de
+ * dispositivos dependiendo de la orientación de la pantalla. Soporta navegación espacial
+ * por voz indicando visualmente el dispositivo actualmente enfocado.
+ *
+ * @param focusedIndex Índice del dispositivo actualmente seleccionado mediante comandos de voz.
+ * @param isListening Estado actual del servicio de reconocimiento continuo de voz.
+ * @param lastCommand Último comando procesado para retroalimentación visual.
+ */
 @Composable
 fun DashboardScreen(
     focusedIndex: Int,
     isListening: Boolean,
-    lastCommand: String,
-    onRecordClick: () -> Unit
+    lastCommand: String
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -51,10 +61,10 @@ fun DashboardScreen(
         ) {
             AppHeader(title = "Smart Home")
 
-            // Si es landscape, podemos usar 4 columnas o mantener 2x2 pero sin aspectRatio tan agresivo
+            // Ajuste dinámico de las proporciones de las tarjetas según la orientación del dispositivo
             val cardModifier = if (isLandscape) Modifier.height(120.dp) else Modifier.aspectRatio(1f)
 
-            // Fila 1: Luces (0) y Ventilador (1)
+            // Fila 1: Luces (Índice 0) y Ventilador (Índice 1)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -75,7 +85,7 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Fila 2: TV (2) y Rutinas (3)
+            // Fila 2: TV (Índice 2) y Rutinas (Índice 3)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -96,6 +106,7 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // Guía de comandos de voz para la navegación de la interfaz
             CommandHint(label = "Navega con", commands = listOf("up", "down", "left", "right"))
             CommandHint(label = "Selecciona con", commands = listOf("yes"))
 
@@ -104,7 +115,17 @@ fun DashboardScreen(
     }
 }
 
-// Componente modular y reutilizable para cada tarjeta
+/**
+ * Tarjeta visual que representa un dispositivo o categoría interactiva en el panel de control.
+ *
+ * Responde a cambios de estado de enfoque (`isFocused`) alterando el color del borde y
+ * del título principal para proveer retroalimentación visual clara durante la navegación.
+ *
+ * @param title Nombre principal del dispositivo o grupo.
+ * @param subtitle Descripción breve o estado actual del dispositivo.
+ * @param isFocused Indica si este componente tiene el foco actual de navegación.
+ * @param modifier Modificador opcional para ajustar la disposición y tamaño.
+ */
 @Composable
 fun DeviceCard(
     title: String,
@@ -116,7 +137,6 @@ fun DeviceCard(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = CardBackground),
-        // Aquí ocurre la magia reactiva: Si isFocused es true, pintamos el borde neón
         border = if (isFocused) BorderStroke(3.dp, NeonCyan) else BorderStroke(1.dp, Color.DarkGray)
     ) {
         Column(

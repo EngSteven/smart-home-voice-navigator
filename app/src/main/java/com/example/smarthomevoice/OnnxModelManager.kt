@@ -1,88 +1,120 @@
 package com.example.smarthomevoice
 
-
 import android.content.Context
+import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import java.io.File
 import java.nio.FloatBuffer
+import kotlin.math.exp
 
+/**
+ * Gestor del ciclo de vida y ejecución del motor de inferencia local (ONNX Runtime).
+ *
+ * Se encarga de instanciar el entorno de ejecución, transferir los artefactos del modelo
+ * desde el empaquetado del APK hacia el almacenamiento accesible en caché, y despachar
+ * los tensores de audio (espectrogramas) para obtener predicciones de comandos de voz.
+ *
+ * @param context Contexto de la aplicación utilizado para acceder a los `assets` y al sistema de archivos local.
+ */
 class OnnxModelManager(context: Context) {
 
-    // Entorno y sesión de ONNX Runtime
     private var ortEnvironment: OrtEnvironment = OrtEnvironment.getEnvironment()
     private var ortSession: OrtSession? = null
 
-    //  El orden estricto de las 10 clases tal cual se definieron en Python
-    private val classes = arrayOf("yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go")
+    /**
+     * Vocabulario de red neuronal. El orden de los índices (0-9) corresponde
+     * estrictamente a la topología de salida (logits) definida durante el entrenamiento.
+     */
+    private val classes = arrayOf(
+        "yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go"
+    )
+
+    companion object {
+        private const val TAG = "OnnxModelManager"
+        private const val CONFIDENCE_THRESHOLD = 0.75f
+    }
 
     init {
         try {
             val modelName = "smart_home_voice_navigator.onnx"
             val dataName = "smart_home_voice_navigator.onnx.data"
 
-            // 1. Definimos las rutas en la memoria caché real del celular
-            val modelFile = java.io.File(context.cacheDir, modelName)
-            val dataFile = java.io.File(context.cacheDir, dataName)
+            val modelFile = File(context.cacheDir, modelName)
+            val dataFile = File(context.cacheDir, dataName)
 
-            // 2. Extraemos el .onnx de la carpeta comprimida assets
+            // Extracción segura del grafo computacional (.onnx)
             if (!modelFile.exists()) {
                 context.assets.open(modelName).use { input ->
                     modelFile.outputStream().use { output -> input.copyTo(output) }
                 }
             }
 
-            // 3. Extraemos los pesos (.data) de la carpeta comprimida assets
+            // Extracción segura de los tensores de pesos externos (.data).
+            // Requerido por ONNX Runtime para modelos que exceden el límite de tamaño
+            // de protobuf (2GB) o están particionados.
             if (!dataFile.exists()) {
                 context.assets.open(dataName).use { input ->
                     dataFile.outputStream().use { output -> input.copyTo(output) }
                 }
             }
 
-            // 4. Inicializamos la sesión pasándole la RUTA REAL del archivo (no los bytes)
-            // Al darle la ruta, ONNX automáticamente encuentra el .data que está a la par
+            // Inicialización de la sesión utilizando la ruta absoluta para permitir
+            // la resolución dinámica de dependencias (.data) adyacentes al modelo base.
             ortSession = ortEnvironment.createSession(modelFile.absolutePath)
-            println("ONNX: Modelo y pesos cargados exitosamente desde caché.")
+            Log.i(TAG, "Grafo computacional y pesos ONNX cargados exitosamente.")
 
         } catch (e: Exception) {
-            e.printStackTrace()
-            println("ONNX: Error al cargar el modelo o los pesos.")
+            Log.e(TAG, "Fallo crítico en la inicialización del motor ONNX", e)
         }
     }
 
     /**
-     * Recibe un arreglo plano de flotantes que representa el Espectrograma Mel
-     * y devuelve el comando predicho (String).
+     * Ejecuta una pasada frontal (forward pass) en la red neuronal utilizando el
+     * espectrograma proporcionado.
+     *
+     * Implementa internamente la función Softmax con estabilización numérica para convertir
+     * los logits crudos $\mathbf{z}$ en una distribución de probabilidad $P$:
+     * $$ P(y = j \mid \mathbf{z}) = \frac{e^{z_j - \max(\mathbf{z})}}{\sum_{k} e^{z_k - \max(\mathbf{z})}} $$
+     *
+     * Las predicciones que no superan el umbral de confianza ([CONFIDENCE_THRESHOLD])
+     * son mitigadas preventivamente para evitar "falsos positivos" en el sistema de escucha continua.
+     *
+     * @param flatSpectrogram Tensor aplanado 1D correspondiente a la extracción de características (Dim: 128x128).
+     * @return El identificador en formato texto de la clase inferida, o "unknown" si la confianza es baja.
      */
     fun predict(flatSpectrogram: FloatArray): String {
-        val session = ortSession ?: return "Error: Sesión no inicializada"
+        val session = ortSession ?: run {
+            Log.e(TAG, "Sesión no inicializada al invocar predict()")
+            return "unknown"
+        }
 
+        // Definición de la topología del tensor de entrada: [Batch, Channels, Height, Width]
         val shape = longArrayOf(1, 1, 128, 128)
-        val floatBuffer = java.nio.FloatBuffer.wrap(flatSpectrogram)
+        val floatBuffer = FloatBuffer.wrap(flatSpectrogram)
         val inputTensor = OnnxTensor.createTensor(ortEnvironment, floatBuffer, shape)
 
         val inputName = session.inputNames.iterator().next()
         val results = session.run(mapOf(inputName to inputTensor))
 
-        // Extraemos los "logits" (números crudos)
         val output = results[0].value as Array<FloatArray>
         val logits = output[0]
 
-        // --- INICIO DE SOFTMAX (Convertir a porcentajes de 0 a 1) ---
+        // Cálculo de Softmax con estabilización numérica (resta del valor máximo)
         val maxLogit = logits.maxOrNull() ?: 0f
         var sumExp = 0f
         val probabilities = FloatArray(logits.size)
 
         for (i in logits.indices) {
-            probabilities[i] = kotlin.math.exp(logits[i] - maxLogit)
+            probabilities[i] = exp(logits[i] - maxLogit)
             sumExp += probabilities[i]
         }
         for (i in probabilities.indices) {
             probabilities[i] /= sumExp
         }
-        // --- FIN DE SOFTMAX ---
 
-        // Buscamos el ganador y su porcentaje de seguridad
+        // Identificación de la clase dominante (ArgMax)
         var maxIdx = 0
         var maxProb = probabilities[0]
         for (i in 1 until probabilities.size) {
@@ -92,17 +124,17 @@ class OnnxModelManager(context: Context) {
             }
         }
 
+        // Liberación proactiva de la memoria nativa JNI
         inputTensor.close()
         results.close()
 
-
-        // Si el modelo está menos del 75% seguro (0.75f), lo descartamos
-        if (maxProb < 0.75f) {
-            println("ONNX: Comando descartado por baja confianza: ${(maxProb * 100).toInt()}% para ${classes[maxIdx]}")
+        // Filtrado por umbral de confianza
+        if (maxProb < CONFIDENCE_THRESHOLD) {
+            Log.d(TAG, "Predicción descartada. Confianza: ${(maxProb * 100).toInt()}% para '${classes[maxIdx]}'")
             return "unknown"
         }
 
-        println("ONNX: Predicción segura: ${classes[maxIdx]} al ${(maxProb * 100).toInt()}%")
+        Log.d(TAG, "Inferencia confirmada: '${classes[maxIdx]}' al ${(maxProb * 100).toInt()}%")
         return classes[maxIdx]
     }
 }

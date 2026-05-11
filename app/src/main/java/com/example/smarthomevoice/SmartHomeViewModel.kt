@@ -5,49 +5,73 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-// Definimos las pantallas posibles de nuestra app
+/**
+ * Enumeración que define los destinos de navegación posibles dentro de la aplicación.
+ */
 enum class AppScreen {
     DASHBOARD, DEVICE, ROUTINE, CONFIRMATION
 }
 
+/**
+ * ViewModel principal que gestiona el estado de la interfaz de usuario y procesa
+ * la lógica de navegación basada en voz.
+ *
+ * Actúa como la máquina de estados que recibe las inferencias del modelo ONNX local
+ * (mediante el sistema de escucha continua) y muta el estado de la UI (navegación espacial,
+ * selección de dispositivos y ejecución de rutinas) de forma reactiva.
+ */
 class SmartHomeViewModel : ViewModel() {
 
-    // Estado actual de la pantalla
     private val _currentScreen = MutableStateFlow(AppScreen.DASHBOARD)
+    /** Estado actual de la navegación en la aplicación. */
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
-    // Estado del foco en el Dashboard (Índices del 0 al 3 para una grilla 2x2)
-    // 0: Luces (Arriba-Izq), 1: Ventilador (Arriba-Der)
-    // 2: TV (Abajo-Izq), 3: Rutinas (Abajo-Der)
     private val _focusedIndex = MutableStateFlow(0)
+    /**
+     * Puntero de navegación espacial para la cuadrícula 2x2 del panel principal.
+     * Mapeo de índices: 0 (Sup-Izq), 1 (Sup-Der), 2 (Inf-Izq), 3 (Inf-Der).
+     */
     val focusedIndex: StateFlow<Int> = _focusedIndex.asStateFlow()
 
-    // Estado para saber si estamos grabando audio
     private val _isListening = MutableStateFlow(false)
+    /** Bandera que indica si el servicio de reconocimiento de voz continuo está activo. */
     val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
 
-    // Estado para mostrar en pantalla qué entendió el modelo
     private val _lastCommand = MutableStateFlow("Ninguno")
+    /** Último comando validado emitido por el motor de inferencia. */
     val lastCommand: StateFlow<String> = _lastCommand.asStateFlow()
 
-    // Nuevo estado: Define si el dispositivo seleccionado está encendido (true) o apagado (false)
     private val _isDeviceOn = MutableStateFlow(false)
+    /** Estado operativo del dispositivo actualmente en contexto (`true` = ON, `false` = OFF). */
     val isDeviceOn: StateFlow<Boolean> = _isDeviceOn.asStateFlow()
 
     private val _focusedRoutineIndex = MutableStateFlow(0)
+    /** Índice que representa la rutina actualmente seleccionada en la lista vertical. */
     val focusedRoutineIndex: StateFlow<Int> = _focusedRoutineIndex.asStateFlow()
 
-    // Indica si la rutina actual está activa ("go") o detenida ("stop")
     private val _isRoutineRunning = MutableStateFlow(false)
+    /** Bandera que indica si la rutina seleccionada se encuentra en ejecución. */
     val isRoutineRunning: StateFlow<Boolean> = _isRoutineRunning.asStateFlow()
 
+    /**
+     * Actualiza el estado global del sistema de micrófono.
+     *
+     * @param listening `true` si el sistema comienza a escuchar, `false` en caso contrario.
+     */
     fun setListening(listening: Boolean) {
         _isListening.value = listening
     }
 
-    // Función principal que recibirá el String del modelo ONNX
+    /**
+     * Evalúa y procesa una etiqueta de comando proveniente del motor de inferencia ONNX.
+     *
+     * El comportamiento del comando es contextual y depende de la pantalla
+     * en la que se encuentre el usuario actualmente (`_currentScreen`).
+     *
+     * @param command Cadena de texto correspondiente a la acción inferida (ej. "up", "down", "yes", "no").
+     */
     fun processVoiceCommand(command: String) {
-        _lastCommand.value = command // Guardamos el comando para mostrarlo en UI
+        _lastCommand.value = command
         val current = _focusedIndex.value
 
         when (_currentScreen.value) {
@@ -61,17 +85,15 @@ class SmartHomeViewModel : ViewModel() {
                 }
             }
             AppScreen.DEVICE -> {
-                // Nueva lógica exclusiva para la pantalla de Dispositivos
                 when (command) {
                     "on" -> _isDeviceOn.value = true
                     "off" -> _isDeviceOn.value = false
                     "no" -> {
                         _currentScreen.value = AppScreen.DASHBOARD
-                        _isDeviceOn.value = false // Reseteamos el estado al salir
+                        _isDeviceOn.value = false
                     }
                 }
             }
-
             AppScreen.ROUTINE -> {
                 val currentRoutine = _focusedRoutineIndex.value
                 when (command) {
@@ -84,6 +106,7 @@ class SmartHomeViewModel : ViewModel() {
                         _isRoutineRunning.value = false
                     }
                     "go" -> {
+                        // Las rutinas requieren validación explícita antes de ejecutarse
                         _currentScreen.value = AppScreen.CONFIRMATION
                     }
                     "stop" -> _isRoutineRunning.value = false
@@ -97,12 +120,10 @@ class SmartHomeViewModel : ViewModel() {
             AppScreen.CONFIRMATION -> {
                 when (command) {
                     "yes" -> {
-                        // Acción confirmada: Activamos la rutina y regresamos a la pantalla anterior
                         _isRoutineRunning.value = true
                         _currentScreen.value = AppScreen.ROUTINE
                     }
                     "no" -> {
-                        // Acción cancelada: Regresamos sin activar nada
                         _currentScreen.value = AppScreen.ROUTINE
                     }
                 }
@@ -110,10 +131,15 @@ class SmartHomeViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Enruta la navegación desde el panel principal hacia la pantalla de detalle correspondiente.
+     *
+     * @param selectedIndex Índice del componente seleccionado en la cuadrícula del panel principal.
+     */
     private fun handleSelection(selectedIndex: Int) {
         when (selectedIndex) {
-            0, 1, 2 -> _currentScreen.value = AppScreen.DEVICE // Luces, Ventilador, TV
-            3 -> _currentScreen.value = AppScreen.ROUTINE // Rutinas
+            0, 1, 2 -> _currentScreen.value = AppScreen.DEVICE
+            3 -> _currentScreen.value = AppScreen.ROUTINE
         }
     }
 }

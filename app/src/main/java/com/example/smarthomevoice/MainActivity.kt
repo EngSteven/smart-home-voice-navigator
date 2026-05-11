@@ -19,40 +19,56 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-
+/**
+ * Actividad principal de la aplicación.
+ *
+ * Gestiona el ciclo de vida de la interfaz de usuario, la solicitud de permisos
+ * de hardware (micrófono) y orquesta el pipeline de reconocimiento de voz continuo.
+ * Conecta la captura de audio crudo con el procesamiento de señales (DSP), el
+ * motor de inferencia local (ONNX) y la actualización del estado global (ViewModel).
+ */
 class MainActivity : ComponentActivity() {
 
     private val viewModel: SmartHomeViewModel by viewModels()
 
-    // Instanciamos tus clases de procesamiento local
     private lateinit var onnxManager: OnnxModelManager
     private val melProcessor = MelSpectrogramProcessor()
     private val voiceRecorder = VoiceRecorderManager()
 
+    companion object {
+        private const val REQUEST_RECORD_AUDIO_PERMISSION = 1
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Solicitamos permisos al inicio si no los tenemos
+        // Validación y solicitud de permisos de grabación en tiempo de ejecución
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1)
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                REQUEST_RECORD_AUDIO_PERMISSION
+            )
         }
 
         onnxManager = OnnxModelManager(this)
 
         setContent {
             MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MainAppUI(
-                        viewModel = viewModel,
-                        // Enviamos una función vacía porque el botón ya no hace nada, es pura decoración
-                        onRecordTriggered = { /* Ya no hace nada, la escucha es automática */ }
-                    )
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MainAppUI(viewModel = viewModel)
                 }
             }
         }
     }
 
-    // Encendemos la escucha infinita CADA VEZ que la app esté visible en pantalla
+    /**
+     * Reanuda el servicio de escucha continua (hands-free) cuando la aplicación
+     * entra en primer plano, asumiendo que los permisos han sido concedidos.
+     */
     override fun onResume() {
         super.onResume()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
@@ -60,44 +76,52 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Apagamos el micrófono si el usuario minimiza la app para que Android no lance una excepción
+    /**
+     * Interrumpe la captura de audio y libera los recursos del micrófono
+     * cuando la aplicación pasa a segundo plano para prevenir excepciones del sistema operativo.
+     */
     override fun onPause() {
         super.onPause()
         voiceRecorder.stopListening()
         viewModel.setListening(false)
     }
 
-    // Función que mantiene vivo el bucle
+    /**
+     * Inicializa el bucle infinito de asistencia por voz.
+     *
+     * Establece el flujo de datos: Captura (VoiceRecorder) -> Extracción de características (MelSpectrogram)
+     * -> Inferencia (ONNX) -> Mutación de estado (ViewModel). Desvía las tareas intensivas a hilos
+     * secundarios y retorna al hilo principal exclusivamente para la actualización reactiva de la UI.
+     */
     private fun startAlwaysOnAssistant() {
-        // Mantenemos la UI con la animación de que siempre está escuchando
         viewModel.setListening(true)
 
         voiceRecorder.startContinuousListening(lifecycleScope) { audioData ->
-            // Este bloque se ejecuta SOLAMENTE cuando el micrófono detecta un sonido fuerte
-
-            // 1. Procesamiento acústico (128x128)
+            // 1. Procesamiento acústico de la señal a tensor 1D (128x128)
             val flatSpectrogram = melProcessor.process(audioData)
 
-            // 2. Predicción de IA
+            // 2. Inferencia de red neuronal local
             val prediction = onnxManager.predict(flatSpectrogram)
 
-            // 3. Reacción en la Interfaz
-            // No muestre nada en caso de no reconocer el comando.
-            //if (prediction != "unknown") {
-            //    // Volvemos al hilo principal para actualizar la UI según el comando
-            //    lifecycleScope.launch(Dispatchers.Main) {
-            //        viewModel.processVoiceCommand(prediction)
-            //    }
-            //}
-            lifecycleScope.launch(Dispatchers.Main) {
-                viewModel.processVoiceCommand(prediction)
+            // 3. Filtrado y enrutamiento del comando hacia la máquina de estados.
+            // Se ignoran predicciones de baja confianza para evitar perturbaciones en la UI.
+            if (prediction != "unknown") {
+                lifecycleScope.launch(Dispatchers.Main) {
+                    viewModel.processVoiceCommand(prediction)
+                }
             }
         }
     }
 }
 
+/**
+ * Componente raíz de la interfaz gráfica que enruta la navegación basándose
+ * en el estado reactivo del `ViewModel`.
+ *
+ * @param viewModel Instancia principal de la máquina de estados de la aplicación.
+ */
 @Composable
-fun MainAppUI(viewModel: SmartHomeViewModel, onRecordTriggered: () -> Unit) {
+fun MainAppUI(viewModel: SmartHomeViewModel) {
     val currentScreen by viewModel.currentScreen.collectAsState()
     val focusedIndex by viewModel.focusedIndex.collectAsState()
     val isListening by viewModel.isListening.collectAsState()
@@ -112,8 +136,7 @@ fun MainAppUI(viewModel: SmartHomeViewModel, onRecordTriggered: () -> Unit) {
             DashboardScreen(
                 focusedIndex = focusedIndex,
                 isListening = isListening,
-                lastCommand = lastCommand,
-                onRecordClick = onRecordTriggered
+                lastCommand = lastCommand
             )
         }
         AppScreen.DEVICE -> {
@@ -128,8 +151,7 @@ fun MainAppUI(viewModel: SmartHomeViewModel, onRecordTriggered: () -> Unit) {
                 deviceName = deviceName,
                 isDeviceOn = isDeviceOn,
                 isListening = isListening,
-                lastCommand = lastCommand,
-                onRecordClick = onRecordTriggered
+                lastCommand = lastCommand
             )
         }
         AppScreen.ROUTINE -> {
@@ -137,8 +159,7 @@ fun MainAppUI(viewModel: SmartHomeViewModel, onRecordTriggered: () -> Unit) {
                 focusedRoutineIndex = focusedRoutineIndex,
                 isRoutineRunning = isRoutineRunning,
                 isListening = isListening,
-                lastCommand = lastCommand,
-                onRecordClick = onRecordTriggered
+                lastCommand = lastCommand
             )
         }
         AppScreen.CONFIRMATION -> {
@@ -152,8 +173,7 @@ fun MainAppUI(viewModel: SmartHomeViewModel, onRecordTriggered: () -> Unit) {
                 actionName = name,
                 actionDescription = desc,
                 isListening = isListening,
-                lastCommand = lastCommand,
-                onRecordClick = onRecordTriggered
+                lastCommand = lastCommand
             )
         }
     }

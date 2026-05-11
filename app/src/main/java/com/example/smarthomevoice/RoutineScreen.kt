@@ -19,13 +19,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/**
+ * Pantalla de gestión y ejecución de rutinas domóticas preconfiguradas.
+ *
+ * Permite al usuario navegar verticalmente por una lista de agrupaciones de comandos
+ * (rutinas) utilizando el sistema de reconocimiento de voz. Proporciona retroalimentación
+ * visual clara sobre qué rutina está enfocada y cuál se encuentra actualmente en ejecución.
+ *
+ * @param focusedRoutineIndex Índice de la lista que corresponde a la rutina actualmente resaltada.
+ * @param isRoutineRunning Indica si la rutina enfocada está actualmente en proceso de ejecución.
+ * @param isListening Estado actual del servicio de reconocimiento de voz continuo.
+ * @param lastCommand Último comando procesado para visualización en el componente de estado.
+ */
 @Composable
 fun RoutineScreen(
     focusedRoutineIndex: Int,
     isRoutineRunning: Boolean,
     isListening: Boolean,
-    lastCommand: String,
-    onRecordClick: () -> Unit
+    lastCommand: String
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -46,7 +57,6 @@ fun RoutineScreen(
         ) {
             AppHeader(title = "Modo Rutinas")
 
-            // Lista de rutinas
             RoutineItem(
                 title = "Modo Estudio",
                 subtitle = "Luces blancas, música suave",
@@ -54,6 +64,7 @@ fun RoutineScreen(
                 isRunning = isRoutineRunning && focusedRoutineIndex == 0
             )
             Spacer(modifier = Modifier.height(12.dp))
+
             RoutineItem(
                 title = "Modo Noche",
                 subtitle = "Apagar todo, activar alarma",
@@ -61,6 +72,7 @@ fun RoutineScreen(
                 isRunning = isRoutineRunning && focusedRoutineIndex == 1
             )
             Spacer(modifier = Modifier.height(12.dp))
+
             RoutineItem(
                 title = "Bienvenida a Casa",
                 subtitle = "Luces cálidas, TV encendida",
@@ -70,6 +82,7 @@ fun RoutineScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // Guía contextual de navegación y control de ejecución
             CommandHint(label = "Navega con", commands = listOf("up", "down"))
             CommandHint(label = "Acción", commands = listOf("go", "stop"))
             CommandHint(label = "Salir", commands = listOf("no"))
@@ -79,9 +92,24 @@ fun RoutineScreen(
     }
 }
 
+/**
+ * Componente visual que representa una rutina específica dentro de la lista.
+ *
+ * Implementa un sistema de jerarquía visual de tres estados mediante el color del borde:
+ * 1. Ejecución (Verde): Máxima prioridad, indica que las acciones se están despachando.
+ * 2. Enfocado (Cyan): Indica que la rutina está seleccionada y lista para recibir comandos.
+ * 3. Inactivo (Gris oscuro): Estado por defecto cuando no tiene el foco.
+ *
+ * @param title Nombre descriptivo de la rutina (ej. "Modo Estudio").
+ * @param subtitle Lista de acciones o dispositivos afectados por la rutina.
+ * @param isFocused Define si la rutina es el objetivo actual de los comandos de voz.
+ * @param isRunning Define si la rutina se está ejecutando activamente en el sistema.
+ */
 @Composable
 fun RoutineItem(title: String, subtitle: String, isFocused: Boolean, isRunning: Boolean) {
     val RunGreen = Color(0xFF00FF00)
+
+    // Cálculo de la prioridad del color del borde según el estado operativo
     val borderColor = when {
         isRunning -> RunGreen
         isFocused -> NeonCyan
@@ -95,14 +123,27 @@ fun RoutineItem(title: String, subtitle: String, isFocused: Boolean, isRunning: 
         border = BorderStroke(if (isFocused) 3.dp else 1.dp, borderColor)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, color = if (isFocused) Color.White else TextGray, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = subtitle, color = TextGray, fontSize = 12.sp)
+                Text(
+                    text = title,
+                    color = if (isFocused) Color.White else TextGray,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = subtitle,
+                    color = TextGray,
+                    fontSize = 12.sp
+                )
             }
+
+            // Etiqueta de estado dinámica visible únicamente cuando la rutina está en foco
             if (isFocused) {
                 Text(
                     text = if (isRunning) "EJECUTANDO" else "EN ESPERA",

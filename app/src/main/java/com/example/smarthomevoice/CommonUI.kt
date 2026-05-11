@@ -2,8 +2,10 @@ package com.example.smarthomevoice
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -15,11 +17,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
-
+/**
+ * Componente que muestra el estado actual del micrófono y retroalimentación visual del sistema de voz.
+ *
+ * Si el sistema está escuchando, renderiza una animación pulsante para alertar al usuario
+ * y muestra en tiempo real el último comando detectado.
+ *
+ * @param isListening Define si el reconocimiento de voz está activo.
+ * @param lastCommand Texto correspondiente al último comando procesado. Se ignora si el valor es "Ninguno".
+ */
 @Composable
 fun VoiceCommandStatus(isListening: Boolean, lastCommand: String) {
+    // Configuración de la animación pulsante para el indicador de grabación
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -42,6 +51,7 @@ fun VoiceCommandStatus(isListening: Boolean, lastCommand: String) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
+            // Indicador visual activo (punto pulsante)
             if (isListening) {
                 Box(
                     modifier = Modifier
@@ -51,6 +61,7 @@ fun VoiceCommandStatus(isListening: Boolean, lastCommand: String) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
+
             Text(
                 text = if (isListening) "ESCUCHANDO..." else "MICRÓFONO DESACTIVADO",
                 color = if (isListening) NeonCyan else Color.Gray,
@@ -59,7 +70,8 @@ fun VoiceCommandStatus(isListening: Boolean, lastCommand: String) {
                 letterSpacing = 1.sp
             )
         }
-        
+
+        // Historial del último comando válido detectado
         if (lastCommand != "Ninguno") {
             Row(
                 modifier = Modifier.padding(top = 4.dp),
@@ -81,6 +93,12 @@ fun VoiceCommandStatus(isListening: Boolean, lastCommand: String) {
     }
 }
 
+/**
+ * Encabezado estandarizado para las pantallas de la aplicación.
+ * Muestra un título centrado con un indicador visual (línea de acento) en la parte inferior.
+ *
+ * @param title Texto a mostrar como título de la pantalla.
+ */
 @Composable
 fun AppHeader(title: String) {
     Column(
@@ -95,6 +113,7 @@ fun AppHeader(title: String) {
             fontSize = 24.sp,
             fontWeight = FontWeight.ExtraBold
         )
+        // Línea de acento decorativa
         Box(
             modifier = Modifier
                 .padding(top = 4.dp)
@@ -105,6 +124,14 @@ fun AppHeader(title: String) {
     }
 }
 
+/**
+ * Componente de ayuda contextual que muestra sugerencias de comandos de voz al usuario.
+ * Formatea los comandos en forma de etiquetas (`tags`) para facilitar su lectura.
+ *
+ * @param label Categoría o descripción de la acción (ej. "Luces").
+ * @param commands Lista de frases o palabras clave válidas para la acción.
+ * @param highlightColor Color utilizado para el fondo, borde y texto de las etiquetas de comando.
+ */
 @Composable
 fun CommandHint(label: String, commands: List<String>, highlightColor: Color = NeonCyan) {
     Row(
@@ -118,6 +145,8 @@ fun CommandHint(label: String, commands: List<String>, highlightColor: Color = N
             fontSize = 12.sp,
             fontWeight = FontWeight.Normal
         )
+
+        // Renderizado dinámico de las etiquetas de comando
         commands.forEachIndexed { index, cmd ->
             Text(
                 text = "'$cmd'",
@@ -130,6 +159,8 @@ fun CommandHint(label: String, commands: List<String>, highlightColor: Color = N
                     .border(0.5.dp, highlightColor.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 4.dp, vertical = 2.dp)
             )
+
+            // Espaciador entre comandos (evita espacio extra después del último elemento)
             if (index < commands.size - 1) {
                 Text(text = " ", fontSize = 12.sp)
             }
